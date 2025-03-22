@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id                                          Int                     @id @default(autoincrement())
+  nombre                                      String                  @db.VarChar(100)
+  telefono                                    String                  @unique(map: "telefono") @db.VarChar(20)
+  foto_perfil                                 String?                 @db.VarChar(255)
+  descripcion                                 String?                 @db.VarChar(255)
+  estado                                      EstadoUsuario?          @default(offline)
+  created_at                                  DateTime                @default(now()) @db.Timestamp(0)
+  password                                    String                  @db.VarChar(255)
+  puntos_acumulados                           Int                     @default(0)
+  archivos                                    archivos[]
+  grupo_usuarios                              grupo_usuarios[]
+  grupos                                      grupos[]
+  historial_recompensas                       historial_recompensas[]
+  mensajes_mensajes_remitente_idTousuarios    Mensaje[]               @relation("mensajes_remitente_idTousuarios")
+  mensajes_mensajes_destinatario_idTousuarios Mensaje[]               @relation("mensajes_destinatario_idTousuarios")
+  puntos                                      puntos[]
+  tareas_tareas_creado_porTousuarios          tareas[]                @relation("tareas_creado_porTousuarios")
+  tareas_tareas_finalizado_porTousuarios      tareas[]                @relation("tareas_finalizado_porTousuarios")
+
+  @@map("usuarios")
+}
+
+model Mensaje {
+  id                                          Int              @id @default(autoincrement())
+  remitente_id                                Int
+  destinatario_id                             Int?
+  grupo_id                                    Int?
+  contenido                                   String?          @db.Text
+  tipo                                        mensajes_tipo    @default(texto)
+  estado                                      mensajes_estado? @default(pendiente)
+  created_at                                  DateTime         @default(now()) @db.Timestamp(0)
+  archivos                                    archivos[]
+  usuarios_mensajes_remitente_idTousuarios    Usuario          @relation("mensajes_remitente_idTousuarios", fields: [remitente_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mensajes_ibfk_1")
+  usuarios_mensajes_destinatario_idTousuarios Usuario?         @relation("mensajes_destinatario_idTousuarios", fields: [destinatario_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mensajes_ibfk_2")
+  grupos                                      grupos?          @relation(fields: [grupo_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mensajes_ibfk_3")
+
+  @@index([destinatario_id], map: "destinatario_id")
+  @@index([grupo_id], map: "grupo_id")
+  @@index([remitente_id], map: "remitente_id")
+  @@map("mensajes")
+}
+
+model archivos {
+  id              Int      @id @default(autoincrement())
+  mensaje_id      Int
+  usuario_id      Int
+  nombre_original String   @db.VarChar(255)
+  ruta            String   @db.VarChar(255)
+  tipo_mime       String   @db.VarChar(100)
+  tama_o          Int      @map("tamaño")
+  created_at      DateTime @default(now()) @db.Timestamp(0)
+  mensajes        Mensaje  @relation(fields: [mensaje_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "archivos_ibfk_1")
+  usuarios        Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "archivos_ibfk_2")
+
+  @@index([mensaje_id], map: "mensaje_id")
+  @@index([usuario_id], map: "usuario_id")
+}
+
+model grupo_usuarios {
+  id         Int     @id @default(autoincrement())
+  grupo_id   Int
+  usuario_id Int
+  grupos     grupos  @relation(fields: [grupo_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "grupo_usuarios_ibfk_1")
+  usuarios   Usuario @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "grupo_usuarios_ibfk_2")
+
+  @@index([grupo_id], map: "grupo_id")
+  @@index([usuario_id], map: "usuario_id")
+}
+
+model grupos {
+  id             Int              @id @default(autoincrement())
+  nombre         String           @db.VarChar(100)
+  foto_grupo     String?          @db.VarChar(255)
+  descripcion    String?          @db.VarChar(255)
+  creador_id     Int
+  created_at     DateTime         @default(now()) @db.Timestamp(0)
+  grupo_usuarios grupo_usuarios[]
+  usuarios       Usuario          @relation(fields: [creador_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "grupos_ibfk_1")
+  mensajes       Mensaje[]
+  tareas         tareas[]
+
+  @@index([creador_id], map: "creador_id")
+}
+
+model tareas {
+  id                                       Int             @id @default(autoincrement())
+  grupo_id                                 Int
+  texto                                    String          @db.Text
+  estatus                                  tareas_estatus? @default(incompleta)
+  creado_por                               Int
+  fecha_creacion                           DateTime        @default(now()) @db.Timestamp(0)
+  fecha_finalizacion                       DateTime?       @db.Timestamp(0)
+  finalizado_por                           Int?
+  grupos                                   grupos          @relation(fields: [grupo_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "tareas_ibfk_1")
+  usuarios_tareas_creado_porTousuarios     Usuario         @relation("tareas_creado_porTousuarios", fields: [creado_por], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "tareas_ibfk_2")
+  usuarios_tareas_finalizado_porTousuarios Usuario?        @relation("tareas_finalizado_porTousuarios", fields: [finalizado_por], references: [id], onUpdate: Restrict, map: "tareas_ibfk_3")
+
+  @@index([creado_por], map: "creado_por")
+  @@index([finalizado_por], map: "finalizado_por")
+  @@index([grupo_id], map: "grupo_id")
+}
+
+model historial_recompensas {
+  id            Int         @id @default(autoincrement())
+  usuario_id    Int
+  recompensa_id Int
+  fecha_canje   DateTime?   @default(now()) @db.DateTime(0)
+  usuarios      Usuario     @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "historial_recompensas_ibfk_1")
+  recompensas   recompensas @relation(fields: [recompensa_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "historial_recompensas_ibfk_2")
+
+  @@index([recompensa_id], map: "recompensa_id")
+  @@index([usuario_id], map: "usuario_id")
+}
+
+model puntos {
+  id          Int     @id @default(autoincrement())
+  usuario_id  Int
+  puntos      Int     @default(0)
+  descripcion String? @db.VarChar(255)
+  usuarios    Usuario @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "puntos_ibfk_1")
+
+  @@index([usuario_id], map: "usuario_id")
+}
+
+model recompensas {
+  id                    Int                     @id @default(autoincrement())
+  nombre                String                  @db.VarChar(255)
+  descripcion           String                  @db.VarChar(255)
+  recompensa            String                  @db.VarChar(255)
+  costo_puntos          Int
+  historial_recompensas historial_recompensas[]
+}
+
+enum EstadoUsuario {
+  online
+  offline
+
+  @@map("estado")
+}
+
+enum mensajes_tipo {
+  texto
+  archivo
+  imagen
+  video
+}
+
+enum mensajes_estado {
+  pendiente
+  entregado
+  leido
+}
+
+enum tareas_estatus {
+  incompleta
+  completa
+}
