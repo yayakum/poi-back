@@ -101,3 +101,14 @@ CREATE TABLE Historial_Recompensas (
     FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE,
     FOREIGN KEY (recompensa_id) REFERENCES Recompensas(id) ON DELETE CASCADE
 );
+
+CREATE TABLE Videollamadas (
+  id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  iniciador_id int NOT NULL,
+  receptor_id int NOT NULL,
+  estado enum('iniciada','conectada','rechazada','finalizada') NOT NULL DEFAULT 'iniciada',
+  inicio_tiempo timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  fin_tiempo timestamp NULL DEFAULT NULL,
+  FOREIGN KEY (iniciador_id) REFERENCES Usuarios(id) ON DELETE CASCADE,
+  FOREIGN KEY (receptor_id) REFERENCES Usuarios(id) ON DELETE CASCADE
+);
