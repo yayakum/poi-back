@@ -5,7 +5,9 @@ CREATE TABLE usuarios (
     foto_perfil VARCHAR(255) DEFAULT NULL,
     descripcion VARCHAR(255) DEFAULT NULL,
     estado ENUM('online','offline') DEFAULT 'online',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    password VARCHAR(255) NOT NULL,
+    puntos_acumulados INT NOT NULL DEFAULT 0
 );
 
 -- Tabla para almacenar los grupos de chat
@@ -71,4 +73,31 @@ CREATE TABLE tareas (
     FOREIGN KEY (grupo_id) REFERENCES grupos(id) ON DELETE CASCADE,
     FOREIGN KEY (creado_por) REFERENCES usuarios(id) ON DELETE CASCADE,
     FOREIGN KEY (finalizado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+
+-- Agregar una tabla para los puntos de los usuarios
+CREATE TABLE Puntos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    puntos INT NOT NULL DEFAULT 0,
+    FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE
+);
+
+-- Agregar una tabla para las recompensas (avatares)
+CREATE TABLE Recompensas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    descripcion VARCHAR(255) NOT NULL,
+    recompensa VARCHAR(255) NOT NULL,
+    costo_puntos INT NOT NULL    
+);
+
+-- Agregar una tabla para el historial de recompensas canjeadas
+CREATE TABLE Historial_Recompensas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    recompensa_id INT NOT NULL,
+    fecha_canje DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE,
+    FOREIGN KEY (recompensa_id) REFERENCES Recompensas(id) ON DELETE CASCADE
 );

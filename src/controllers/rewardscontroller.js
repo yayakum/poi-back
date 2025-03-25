@@ -119,6 +119,18 @@ export const redeemReward = async (req, res) => {
         throw new Error('Recompensa no encontrada');
       }
 
+      // Verificar si el usuario ya ha canjeado esta recompensa
+      const alreadyRedeemed = await prisma.historial_recompensas.findFirst({
+        where: {
+          usuario_id: parseInt(userId),
+          recompensa_id: parseInt(rewardId)
+        }
+      });
+
+      if (alreadyRedeemed) {
+        throw new Error('Ya has canjeado esta recompensa anteriormente');
+      }
+
       // Verificar que el usuario tiene suficientes puntos
       if (user.puntos_acumulados < reward.costo_puntos) {
         throw new Error('Puntos insuficientes para canjear esta recompensa');
@@ -172,6 +184,10 @@ export const redeemReward = async (req, res) => {
     }
     
     if (error.message === 'Puntos insuficientes para canjear esta recompensa') {
+      return res.status(400).json({ message: error.message });
+    }
+    
+    if (error.message === 'Ya has canjeado esta recompensa anteriormente') {
       return res.status(400).json({ message: error.message });
     }
     

@@ -8,24 +8,26 @@ datasource db {
 }
 
 model Usuario {
-  id                                          Int                     @id @default(autoincrement())
-  nombre                                      String                  @db.VarChar(100)
-  telefono                                    String                  @unique(map: "telefono") @db.VarChar(20)
-  foto_perfil                                 String?                 @db.VarChar(255)
-  descripcion                                 String?                 @db.VarChar(255)
-  estado                                      EstadoUsuario?          @default(offline)
-  created_at                                  DateTime                @default(now()) @db.Timestamp(0)
-  password                                    String                  @db.VarChar(255)
-  puntos_acumulados                           Int                     @default(0)
-  archivos                                    archivos[]
-  grupo_usuarios                              grupo_usuarios[]
-  grupos                                      grupos[]
-  historial_recompensas                       historial_recompensas[]
-  mensajes_mensajes_remitente_idTousuarios    Mensaje[]               @relation("mensajes_remitente_idTousuarios")
-  mensajes_mensajes_destinatario_idTousuarios Mensaje[]               @relation("mensajes_destinatario_idTousuarios")
-  puntos                                      puntos[]
-  tareas_tareas_creado_porTousuarios          tareas[]                @relation("tareas_creado_porTousuarios")
-  tareas_tareas_finalizado_porTousuarios      tareas[]                @relation("tareas_finalizado_porTousuarios")
+  id                                                 Int                     @id @default(autoincrement())
+  nombre                                             String                  @db.VarChar(100)
+  telefono                                           String                  @unique(map: "telefono") @db.VarChar(20)
+  foto_perfil                                        String?                 @db.VarChar(255)
+  descripcion                                        String?                 @db.VarChar(255)
+  estado                                             EstadoUsuario?          @default(offline)
+  created_at                                         DateTime                @default(now()) @db.Timestamp(0)
+  password                                           String                  @db.VarChar(255)
+  puntos_acumulados                                  Int                     @default(0)
+  archivos                                           archivos[]
+  grupo_usuarios                                     grupo_usuarios[]
+  grupos                                             grupos[]
+  historial_recompensas                              historial_recompensas[]
+  mensajes_mensajes_remitente_idTousuarios           Mensaje[]               @relation("mensajes_remitente_idTousuarios")
+  mensajes_mensajes_destinatario_idTousuarios        Mensaje[]               @relation("mensajes_destinatario_idTousuarios")
+  puntos                                             puntos[]
+  tareas_tareas_creado_porTousuarios                 tareas[]                @relation("tareas_creado_porTousuarios")
+  tareas_tareas_finalizado_porTousuarios             tareas[]                @relation("tareas_finalizado_porTousuarios")
+  videollamadas_videollamadas_iniciador_idTousuarios videollamadas[]         @relation("videollamadas_iniciador_idTousuarios")
+  videollamadas_videollamadas_receptor_idTousuarios  videollamadas[]         @relation("videollamadas_receptor_idTousuarios")
 
   @@map("usuarios")
 }
@@ -141,6 +143,20 @@ model recompensas {
   historial_recompensas historial_recompensas[]
 }
 
+model videollamadas {
+  id                                            Int                  @id @default(autoincrement())
+  iniciador_id                                  Int
+  receptor_id                                   Int
+  estado                                        videollamadas_estado @default(iniciada)
+  inicio_tiempo                                 DateTime             @default(now()) @db.Timestamp(0)
+  fin_tiempo                                    DateTime?            @db.Timestamp(0)
+  usuarios_videollamadas_iniciador_idTousuarios Usuario              @relation("videollamadas_iniciador_idTousuarios", fields: [iniciador_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "videollamadas_ibfk_1")
+  usuarios_videollamadas_receptor_idTousuarios  Usuario              @relation("videollamadas_receptor_idTousuarios", fields: [receptor_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "videollamadas_ibfk_2")
+
+  @@index([iniciador_id], map: "iniciador_id")
+  @@index([receptor_id], map: "receptor_id")
+}
+
 enum EstadoUsuario {
   online
   offline
@@ -164,4 +180,11 @@ enum mensajes_estado {
 enum tareas_estatus {
   incompleta
   completa
+}
+
+enum videollamadas_estado {
+  iniciada
+  conectada
+  rechazada
+  finalizada
 }

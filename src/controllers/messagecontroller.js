@@ -71,30 +71,32 @@ export const getUserMessages = async (req, res) => {
       }
     });
 
-    // Transformar los datos para el cliente
-    const formattedMessages = messages.map(message => {
-      const sender = message.usuarios_mensajes_remitente_idTousuarios;
-      return {
-        id: message.id,
-        text: message.contenido,
-        senderId: message.remitente_id,
-        receiverId: message.destinatario_id,
-        sent: message.remitente_id === userId,  // true si el usuario actual es el remitente
-        time: message.created_at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        timestamp: message.created_at,
-        sender: sender.nombre,
-        senderName: sender.nombre,
-        senderImage: sender.foto_perfil,
-        status: message.estado,  // Incluir el estado del mensaje
-        attachments: message.archivos.map(file => ({
-          id: file.id,
-          name: file.nombre_original,
-          url: file.ruta,
-          type: file.tipo_mime,
-          size: file.tama_o
-        }))
-      };
-    });
+   
+  // Y en la parte donde se transforman los datos, asegúrate de que se incluya correctamente el tipo y los archivos:
+  const formattedMessages = messages.map(message => {
+    const sender = message.usuarios_mensajes_remitente_idTousuarios;
+    return {
+      id: message.id,
+      text: message.contenido,
+      senderId: message.remitente_id,
+      receiverId: message.destinatario_id,
+      sent: message.remitente_id === userId,  // true si el usuario actual es el remitente
+      time: message.created_at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: message.created_at,
+      sender: sender.nombre,
+      senderName: sender.nombre,
+      senderImage: sender.foto_perfil,
+      status: message.estado,  // Incluir el estado del mensaje
+      type: message.tipo,      // Incluir el tipo de mensaje
+      attachments: message.archivos.map(file => ({
+        id: file.id,
+        name: file.nombre_original,
+        url: `http://localhost:3000${file.ruta}`, // URL completa
+        type: file.tipo_mime,
+        size: file.tama_o
+      }))
+    };
+  });
 
     // Si el usuario actual es el destinatario, marcar los mensajes no leídos como leídos
     if (messages.length > 0) {
@@ -123,7 +125,8 @@ export const getUserMessages = async (req, res) => {
   }
 };
 
-// Obtener mensajes de un grupo
+// Modificación al método getGroupMessages en messagecontroller.js
+
 export const getGroupMessages = async (req, res) => {
   try {
     const groupId = parseInt(req.params.groupId);
@@ -147,13 +150,17 @@ export const getGroupMessages = async (req, res) => {
             foto_perfil: true
           }
         },
-        archivos: true
+        archivos: true // Incluir archivos adjuntos
       }
     });
 
     // Transformar los datos para el cliente
     const formattedMessages = messages.map(message => {
       const sender = message.usuarios_mensajes_remitente_idTousuarios;
+      
+      // Construir la URL base para archivos
+      const serverUrl = 'http://localhost:3000'; // En producción esto podría venir de configuración
+      
       return {
         id: message.id,
         text: message.contenido,
@@ -163,14 +170,15 @@ export const getGroupMessages = async (req, res) => {
         senderName: sender.nombre,
         senderId: sender.id,
         senderImage: sender.foto_perfil,
-        status: message.estado,  // Incluir el estado del mensaje
-        attachments: message.archivos.map(file => ({
-          id: file.id,
-          name: file.nombre_original,
-          url: file.ruta,
-          type: file.tipo_mime,
-          size: file.tama_o
-        }))
+        status: message.estado,
+        type: message.tipo || 'texto', // Asegurarse de que haya un tipo
+        file: message.archivos && message.archivos.length > 0 ? {
+          id: message.archivos[0].id,
+          name: message.archivos[0].nombre_original,
+          url: `${serverUrl}${message.archivos[0].ruta}`, // URL completa
+          type: message.archivos[0].tipo_mime,
+          size: message.archivos[0].tama_o
+        } : null
       };
     });
 
@@ -408,6 +416,135 @@ export const getUnreadMessageCounts = async (req, res) => {
     res.json({ unreadCounts });
   } catch (error) {
     console.error('Error al obtener mensajes no leídos:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+};
+
+// Enviar mensaje a un grupo (esta función es un respaldo para cuando Socket.IO no está disponible)
+export const sendGroupMessage = async (req, res) => {
+  try {
+    const { remitente_id, grupo_id, contenido, tipo } = req.body;
+    const tipoMensaje = tipo || 'texto';
+
+    // Validación básica
+    if (!remitente_id || !grupo_id || !contenido) {
+      return res.status(400).json({ message: 'Datos incompletos' });
+    }
+
+    // Verificar que el usuario sea miembro del grupo
+    const esMiembro = await prisma.grupo_usuarios.findFirst({
+      where: {
+        grupo_id: parseInt(grupo_id),
+        usuario_id: parseInt(remitente_id)
+      }
+    });
+
+    if (!esMiembro) {
+      return res.status(403).json({ message: 'No eres miembro de este grupo' });
+    }
+
+    // Crear mensaje en la base de datos
+    const message = await prisma.mensaje.create({
+      data: {
+        remitente_id: parseInt(remitente_id),
+        grupo_id: parseInt(grupo_id),
+        contenido,
+        tipo: tipoMensaje,
+        estado: 'entregado'  // En mensajes de grupo, marcamos como entregado inmediatamente
+      },
+      include: {
+        usuarios_mensajes_remitente_idTousuarios: {
+          select: {
+            id: true,
+            nombre: true,
+            foto_perfil: true
+          }
+        }
+      }
+    });
+
+    // Otorgar puntos al usuario por enviar mensaje de texto
+    if (tipoMensaje === 'texto') {
+      await awardPointsForMessage(remitente_id, tipoMensaje);
+    }
+
+    const sender = message.usuarios_mensajes_remitente_idTousuarios;
+    const formattedMessage = {
+      id: message.id,
+      text: message.contenido,
+      timestamp: message.created_at,
+      time: message.created_at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      senderId: sender.id,
+      senderName: sender.nombre,
+      senderImage: sender.foto_perfil,
+      groupId: parseInt(grupo_id),
+      status: message.estado
+    };
+
+    // Aquí podrías emitir el mensaje a través de Socket.IO si tienes acceso a la instancia
+    // (esto requeriría una refactorización adicional para hacer que io sea accesible aquí)
+
+    res.status(201).json({ 
+      message: 'Mensaje enviado al grupo', 
+      data: formattedMessage 
+    });
+  } catch (error) {
+    console.error('Error al enviar mensaje al grupo:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+};
+
+// Marcar mensajes de grupo como leídos
+export const markGroupMessagesAsRead = async (req, res) => {
+  try {
+    const { userId, groupId, messageIds } = req.body;
+
+    if (!messageIds || messageIds.length === 0) {
+      return res.status(400).json({ message: 'No se especificaron mensajes para marcar' });
+    }
+
+    // Verificar que el usuario sea miembro del grupo
+    const esMiembro = await prisma.grupo_usuarios.findFirst({
+      where: {
+        grupo_id: parseInt(groupId),
+        usuario_id: parseInt(userId)
+      }
+    });
+
+    if (!esMiembro) {
+      return res.status(403).json({ message: 'No eres miembro de este grupo' });
+    }
+
+    // Para cada mensaje, registrar que el usuario lo ha leído
+    await Promise.all(messageIds.map(async (messageId) => {
+      // Verificar si ya existe un registro de lectura
+      const existingRead = await prisma.mensaje_leido_grupos.findFirst({
+        where: {
+          mensaje_id: parseInt(messageId),
+          usuario_id: parseInt(userId)
+        }
+      });
+      
+      // Si no existe, crear el registro
+      if (!existingRead) {
+        await prisma.mensaje_leido_grupos.create({
+          data: {
+            mensaje_id: parseInt(messageId),
+            usuario_id: parseInt(userId),
+            fecha_lectura: new Date()
+          }
+        });
+      }
+    }));
+
+    res.json({ 
+      success: true, 
+      message: 'Mensajes de grupo marcados como leídos', 
+      messageIds,
+      groupId
+    });
+  } catch (error) {
+    console.error('Error al marcar mensajes de grupo como leídos:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 };
