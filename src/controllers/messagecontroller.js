@@ -125,8 +125,7 @@ export const getUserMessages = async (req, res) => {
   }
 };
 
-// Modificación al método getGroupMessages en messagecontroller.js
-
+// Función modificada para obtener mensajes de grupo con estado correcto
 export const getGroupMessages = async (req, res) => {
   try {
     const groupId = parseInt(req.params.groupId);
@@ -150,7 +149,8 @@ export const getGroupMessages = async (req, res) => {
             foto_perfil: true
           }
         },
-        archivos: true // Incluir archivos adjuntos
+        archivos: true, // Incluir archivos adjuntos
+        mensaje_leido_grupos: true // Incluir registros de lectura para análisis
       }
     });
 
@@ -178,11 +178,23 @@ export const getGroupMessages = async (req, res) => {
           url: `${serverUrl}${message.archivos[0].ruta}`, // URL completa
           type: message.archivos[0].tipo_mime,
           size: message.archivos[0].tama_o
-        } : null
+        } : null,
+        readBy: message.mensaje_leido_grupos.map(record => record.usuario_id) // Añadir quién ha leído
       };
     });
 
-    res.json({ messages: formattedMessages });
+    // Recolectar IDs de mensajes que el usuario no ha leído
+    const unreadMessageIds = messages
+      .filter(message => 
+        message.remitente_id !== userId && 
+        !message.mensaje_leido_grupos.some(record => record.usuario_id === userId)
+      )
+      .map(message => message.id);
+
+    res.json({ 
+      messages: formattedMessages,
+      unreadMessageIds // Enviar al cliente para que pueda marcarlos como leídos
+    });
   } catch (error) {
     console.error('Error al obtener mensajes del grupo:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
@@ -327,100 +339,7 @@ export const markMessagesAsRead = async (req, res) => {
   }
 };
 
-// Agregar a messagecontroller.js
-
-// Obtener cantidad de mensajes no leídos para un usuario
-export const getUnreadMessageCounts = async (req, res) => {
-  try {
-    const userId = parseInt(req.params.userId);
-    
-    // Verificar que el usuario exista
-    const user = await prisma.usuario.findUnique({ 
-      where: { id: userId }
-    });
-
-    if (!user) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-    }
-
-    // Obtener mensajes no leídos (entregados pero no leídos) para mensajes directos
-    const unreadDirectMessages = await prisma.mensaje.groupBy({
-      by: ['remitente_id'],
-      where: {
-        destinatario_id: userId,
-        estado: 'entregado' // Solo mensajes entregados pero no leídos
-      },
-      _count: {
-        id: true
-      }
-    });
-
-    // Obtener mensajes pendientes (no entregados) para mensajes directos
-    const pendingDirectMessages = await prisma.mensaje.groupBy({
-      by: ['destinatario_id'],
-      where: {
-        remitente_id: userId,
-        estado: 'pendiente' // Mensajes enviados pero aún no entregados
-      },
-      _count: {
-        id: true
-      }
-    });
-
-    // Obtener mensajes no leídos para grupos
-    const unreadGroupMessages = await prisma.mensaje.groupBy({
-      by: ['grupo_id'],
-      where: {
-        grupo_id: { not: null },
-        grupos_mensajes_grupo_idTogrupos: {
-          grupo_usuarios: {
-            some: {
-              usuario_id: userId
-            }
-          }
-        },
-        // No contar mensajes enviados por el propio usuario
-        remitente_id: { not: userId },
-        // Condición para que el mensaje no haya sido leído por este usuario
-        mensaje_leido_grupos: {
-          none: {
-            usuario_id: userId
-          }
-        }
-      },
-      _count: {
-        id: true
-      }
-    });
-
-    // Formatear resultados
-    const unreadCounts = {};
-    
-    // Formatear mensajes directos no leídos
-    unreadDirectMessages.forEach(item => {
-      unreadCounts[item.remitente_id] = item._count.id;
-    });
-    
-    // Formatear mensajes pendientes (con prefijo "p" para pendientes)
-    pendingDirectMessages.forEach(item => {
-      unreadCounts[`p${item.destinatario_id}`] = item._count.id;
-    });
-    
-    // Formatear mensajes de grupo no leídos (con prefijo "g" para grupos)
-    unreadGroupMessages.forEach(item => {
-      if (item.grupo_id) {
-        unreadCounts[`g${item.grupo_id}`] = item._count.id;
-      }
-    });
-
-    res.json({ unreadCounts });
-  } catch (error) {
-    console.error('Error al obtener mensajes no leídos:', error);
-    res.status(500).json({ message: 'Error interno del servidor' });
-  }
-};
-
-// Enviar mensaje a un grupo (esta función es un respaldo para cuando Socket.IO no está disponible)
+// Función modificada para enviar mensajes a grupo con estado inicial correcto
 export const sendGroupMessage = async (req, res) => {
   try {
     const { remitente_id, grupo_id, contenido, tipo } = req.body;
@@ -443,6 +362,20 @@ export const sendGroupMessage = async (req, res) => {
       return res.status(403).json({ message: 'No eres miembro de este grupo' });
     }
 
+    // Verificar si hay miembros online en el grupo (diferentes al remitente)
+    const membersOnline = await prisma.grupo_usuarios.count({
+      where: {
+        grupo_id: parseInt(grupo_id),
+        usuario_id: { not: parseInt(remitente_id) },
+        usuarios: {
+          estado: 'online'
+        }
+      }
+    });
+
+    // Si hay miembros online, marcar como entregado, de lo contrario como pendiente
+    const initialStatus = membersOnline > 0 ? 'entregado' : 'pendiente';
+
     // Crear mensaje en la base de datos
     const message = await prisma.mensaje.create({
       data: {
@@ -450,7 +383,7 @@ export const sendGroupMessage = async (req, res) => {
         grupo_id: parseInt(grupo_id),
         contenido,
         tipo: tipoMensaje,
-        estado: 'entregado'  // En mensajes de grupo, marcamos como entregado inmediatamente
+        estado: initialStatus
       },
       include: {
         usuarios_mensajes_remitente_idTousuarios: {
@@ -478,7 +411,7 @@ export const sendGroupMessage = async (req, res) => {
       senderName: sender.nombre,
       senderImage: sender.foto_perfil,
       groupId: parseInt(grupo_id),
-      status: message.estado
+      status: initialStatus
     };
 
     // Aquí podrías emitir el mensaje a través de Socket.IO si tienes acceso a la instancia
@@ -494,7 +427,8 @@ export const sendGroupMessage = async (req, res) => {
   }
 };
 
-// Marcar mensajes de grupo como leídos
+// Función modificada para marcar mensajes de grupo como leídos correctamente
+// Modificación para markGroupMessagesAsRead en messagecontroller.js
 export const markGroupMessagesAsRead = async (req, res) => {
   try {
     const { userId, groupId, messageIds } = req.body;
@@ -515,12 +449,18 @@ export const markGroupMessagesAsRead = async (req, res) => {
       return res.status(403).json({ message: 'No eres miembro de este grupo' });
     }
 
+    // Lista para mensajes que necesitan actualización
+    const processedMessageIds = [];
+    const updatedToReadMessages = [];
+
     // Para cada mensaje, registrar que el usuario lo ha leído
     await Promise.all(messageIds.map(async (messageId) => {
+      const parsedMessageId = parseInt(messageId);
+      
       // Verificar si ya existe un registro de lectura
       const existingRead = await prisma.mensaje_leido_grupos.findFirst({
         where: {
-          mensaje_id: parseInt(messageId),
+          mensaje_id: parsedMessageId,
           usuario_id: parseInt(userId)
         }
       });
@@ -529,22 +469,212 @@ export const markGroupMessagesAsRead = async (req, res) => {
       if (!existingRead) {
         await prisma.mensaje_leido_grupos.create({
           data: {
-            mensaje_id: parseInt(messageId),
+            mensaje_id: parsedMessageId,
             usuario_id: parseInt(userId),
             fecha_lectura: new Date()
           }
         });
+        
+        processedMessageIds.push(parsedMessageId);
       }
     }));
+
+    // Para cada mensaje procesado, verificar si todos los miembros lo han leído
+    if (processedMessageIds.length > 0) {
+      // Obtener todos los miembros del grupo
+      const groupMembers = await prisma.grupo_usuarios.findMany({
+        where: { grupo_id: parseInt(groupId) },
+        select: { usuario_id: true }
+      });
+      
+      // Procesar cada mensaje
+      for (const messageId of processedMessageIds) {
+        // Obtener el mensaje para saber quién es el remitente
+        const message = await prisma.mensaje.findUnique({
+          where: { id: messageId },
+          select: { remitente_id: true, estado: true }
+        });
+        
+        if (!message || message.estado === 'leido') continue;
+        
+        // Obtener todos los registros de lectura para este mensaje
+        const readRecords = await prisma.mensaje_leido_grupos.findMany({
+          where: { mensaje_id: messageId },
+          select: { usuario_id: true }
+        });
+        
+        // Crear un conjunto de IDs de usuarios que han leído el mensaje
+        const readUserIds = new Set(readRecords.map(r => r.usuario_id));
+        
+        // Verificar si todos los miembros (excepto el remitente) han leído el mensaje
+        let allMembersRead = true;
+        for (const member of groupMembers) {
+          // No necesitamos verificar si el remitente leyó su propio mensaje
+          if (member.usuario_id === message.remitente_id) continue;
+          
+          if (!readUserIds.has(member.usuario_id)) {
+            allMembersRead = false;
+            break;
+          }
+        }
+        
+        // Si todos han leído el mensaje, actualizarlo a 'leido'
+        if (allMembersRead && message.estado !== 'leido') {
+          await prisma.mensaje.update({
+            where: { id: messageId },
+            data: { estado: 'leido' }
+          });
+          
+          updatedToReadMessages.push(messageId);
+          
+          // NUEVO: Notificar a través de Socket.IO si está disponible
+          // Importa el estado compartido de socket.js
+          try {
+            const { sharedState } = await import('../socket.js');
+            if (sharedState && sharedState.io) {
+              // Notificar al remitente
+              const senderSocketId = sharedState.userSockets[message.remitente_id];
+              if (senderSocketId) {
+                sharedState.io.of('/group').to(senderSocketId).emit('messageStatusUpdate', {
+                  messageId,
+                  status: 'leido',
+                  groupId: parseInt(groupId)
+                });
+              }
+              
+              // Notificar a todos en el grupo
+              const roomId = `group-${groupId}`;
+              sharedState.io.of('/group').to(roomId).emit('messageStatusUpdate', {
+                messageId,
+                status: 'leido',
+                groupId: parseInt(groupId)
+              });
+            }
+          } catch (socketError) {
+            console.error('Error al notificar por Socket.IO:', socketError);
+            // No fallamos la petición si hay error en la notificación
+          }
+        }
+      }
+    }
 
     res.json({ 
       success: true, 
       message: 'Mensajes de grupo marcados como leídos', 
       messageIds,
+      updatedToReadMessages,
       groupId
     });
   } catch (error) {
     console.error('Error al marcar mensajes de grupo como leídos:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+};
+
+// Reemplaza la función getUnreadMessagesStatus en messagecontroller.js con esta versión
+
+// Nueva función para obtener el estado de mensajes no leídos y enviar notificaciones Socket.IO
+export const getUnreadMessagesStatus = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId);
+
+    // Verificar que el usuario exista
+    const user = await prisma.usuario.findUnique({ 
+      where: { id: userId } 
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Buscar mensajes no leídos (estado 'pendiente' o 'entregado') donde el usuario es el destinatario
+    const unreadPrivateMessages = await prisma.mensaje.findMany({
+      where: {
+        destinatario_id: userId,
+        estado: { in: ['pendiente', 'entregado'] },
+        grupo_id: null // Solo mensajes privados
+      },
+      select: {
+        remitente_id: true
+      }
+    });
+
+    // Obtener IDs únicos de remitentes con mensajes no leídos
+    const uniqueSenderIds = [...new Set(unreadPrivateMessages.map(msg => msg.remitente_id))];
+    
+    // Formatear la respuesta para incluir información de mensajes no leídos
+    const unreadStatus = uniqueSenderIds.map(senderId => ({
+      senderId,
+      hasUnread: true
+    }));
+
+    // Obtener grupos con mensajes no leídos
+    const groupsWithUnreadMessages = await prisma.mensaje.findMany({
+      where: {
+        grupo_id: { not: null },
+        remitente_id: { not: userId },
+        mensaje_leido_grupos: {
+          none: {
+            usuario_id: userId
+          }
+        }
+      },
+      select: {
+        grupo_id: true
+      },
+      distinct: ['grupo_id']
+    });
+
+    // Agregar información de grupos con mensajes no leídos
+    const unreadGroupsStatus = groupsWithUnreadMessages.map(item => ({
+      groupId: item.grupo_id,
+      hasUnread: true
+    }));
+
+    // Enviar notificación de mensajes no leídos a través de Socket.IO
+    try {
+      // Importar el estado compartido de socket.js
+      const { sharedState } = await import('../socket.js');
+      
+      if (sharedState && sharedState.userSockets && sharedState.userSockets[userId]) {
+        const socketId = sharedState.userSockets[userId];
+        
+        // Enviar actualización para mensajes privados no leídos
+        if (unreadStatus.length > 0) {
+          unreadStatus.forEach(item => {
+            sharedState.io.of('/private').to(socketId).emit('unreadMessagesUpdate', {
+              type: 'private',
+              senderId: item.senderId,
+              hasUnread: true
+            });
+          });
+        }
+        
+        // Enviar actualización para mensajes de grupo no leídos
+        if (unreadGroupsStatus.length > 0) {
+          unreadGroupsStatus.forEach(item => {
+            sharedState.io.of('/private').to(socketId).emit('unreadMessagesUpdate', {
+              type: 'group',
+              groupId: item.groupId,
+              hasUnread: true
+            });
+          });
+        }
+        
+        console.log(`Notificaciones de mensajes no leídos enviadas a usuario ${userId} vía Socket.IO`);
+      }
+    } catch (socketError) {
+      console.error('Error al enviar notificaciones por Socket.IO:', socketError);
+      // No fallamos la petición si hay error en la notificación
+    }
+
+    res.json({ 
+      unreadStatus,
+      unreadGroupsStatus,
+      timestamp: new Date().toISOString() // Añadir timestamp para debug
+    });
+  } catch (error) {
+    console.error('Error al obtener estado de mensajes no leídos:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 };

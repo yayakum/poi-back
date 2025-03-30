@@ -21,6 +21,7 @@ model Usuario {
   grupo_usuarios                                     grupo_usuarios[]
   grupos                                             grupos[]
   historial_recompensas                              historial_recompensas[]
+  mensaje_leido_grupos                               mensaje_leido_grupos[]
   mensajes_mensajes_remitente_idTousuarios           Mensaje[]               @relation("mensajes_remitente_idTousuarios")
   mensajes_mensajes_destinatario_idTousuarios        Mensaje[]               @relation("mensajes_destinatario_idTousuarios")
   puntos                                             puntos[]
@@ -33,18 +34,19 @@ model Usuario {
 }
 
 model Mensaje {
-  id                                          Int              @id @default(autoincrement())
+  id                                          Int                    @id @default(autoincrement())
   remitente_id                                Int
   destinatario_id                             Int?
   grupo_id                                    Int?
-  contenido                                   String?          @db.Text
-  tipo                                        mensajes_tipo    @default(texto)
-  estado                                      mensajes_estado? @default(pendiente)
-  created_at                                  DateTime         @default(now()) @db.Timestamp(0)
+  contenido                                   String?                @db.Text
+  tipo                                        mensajes_tipo          @default(texto)
+  estado                                      mensajes_estado?       @default(pendiente)
+  created_at                                  DateTime               @default(now()) @db.Timestamp(0)
   archivos                                    archivos[]
-  usuarios_mensajes_remitente_idTousuarios    Usuario          @relation("mensajes_remitente_idTousuarios", fields: [remitente_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mensajes_ibfk_1")
-  usuarios_mensajes_destinatario_idTousuarios Usuario?         @relation("mensajes_destinatario_idTousuarios", fields: [destinatario_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mensajes_ibfk_2")
-  grupos                                      grupos?          @relation(fields: [grupo_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mensajes_ibfk_3")
+  mensaje_leido_grupos                        mensaje_leido_grupos[]
+  usuarios_mensajes_remitente_idTousuarios    Usuario                @relation("mensajes_remitente_idTousuarios", fields: [remitente_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mensajes_ibfk_1")
+  usuarios_mensajes_destinatario_idTousuarios Usuario?               @relation("mensajes_destinatario_idTousuarios", fields: [destinatario_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mensajes_ibfk_2")
+  grupos                                      grupos?                @relation(fields: [grupo_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mensajes_ibfk_3")
 
   @@index([destinatario_id], map: "destinatario_id")
   @@index([grupo_id], map: "grupo_id")
@@ -157,18 +159,23 @@ model videollamadas {
   @@index([receptor_id], map: "receptor_id")
 }
 
+model mensaje_leido_grupos {
+  id            Int      @id @default(autoincrement())
+  mensaje_id    Int
+  usuario_id    Int
+  fecha_lectura DateTime @default(now()) @db.DateTime(0)
+  mensajes      Mensaje  @relation(fields: [mensaje_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mensaje_leido_grupos_ibfk_1")
+  usuarios      Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "mensaje_leido_grupos_ibfk_2")
+
+  @@index([mensaje_id], map: "mensaje_id")
+  @@index([usuario_id], map: "usuario_id")
+}
+
 enum EstadoUsuario {
   online
   offline
 
   @@map("estado")
-}
-
-enum mensajes_tipo {
-  texto
-  archivo
-  imagen
-  video
 }
 
 enum mensajes_estado {
@@ -187,4 +194,12 @@ enum videollamadas_estado {
   conectada
   rechazada
   finalizada
+}
+
+enum mensajes_tipo {
+  texto
+  archivo
+  imagen
+  video
+  ubicacion
 }

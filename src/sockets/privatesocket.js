@@ -183,7 +183,17 @@ const configurePrivateSocket = (io, prisma, sharedState) => {
     // Enviar mensaje privado
     socket.on('sendPrivateMessage', async (data) => {
       try {
-        const { senderId, receiverId, text, senderName } = data;
+        const { senderId, receiverId, text, senderName, tempId } = data;
+        
+        // Validar datos
+        if (!senderId || !receiverId || !text) {
+          console.error('Datos incompletos en sendPrivateMessage:', data);
+          socket.emit('messageError', { 
+            error: 'No se pudo enviar el mensaje: datos incompletos',
+            tempId 
+          });
+          return;
+        }
         
         // Verificar si el destinatario está en línea
         const isReceiverOnline = userConnections[receiverId] && userConnections[receiverId] > 0;
@@ -191,7 +201,7 @@ const configurePrivateSocket = (io, prisma, sharedState) => {
         // Determinar la sala de chat
         const roomId = [senderId, receiverId].sort().join('-');
         
-        // NUEVO: Verificar si el usuario está activo en este chat específico
+        // Verificar si el usuario está activo en este chat específico
         const isReceiverInChat = isReceiverOnline && 
                                 userActiveChatRooms[receiverId] && 
                                 userActiveChatRooms[receiverId].has(roomId);
@@ -205,6 +215,8 @@ const configurePrivateSocket = (io, prisma, sharedState) => {
         } else {
           initialStatus = 'entregado'; // El receptor está online pero no en el chat
         }
+        
+        console.log(`Estado inicial mensaje para ${receiverId}: ${initialStatus} (online: ${isReceiverOnline}, en chat: ${isReceiverInChat})`);
         
         // Crear mensaje en la base de datos
         const message = await prisma.mensaje.create({
@@ -223,6 +235,7 @@ const configurePrivateSocket = (io, prisma, sharedState) => {
         // Crear el objeto de mensaje formateado
         const formattedMessage = {
           id: message.id,
+          tempId,
           senderId,
           senderName,
           receiverId,
@@ -237,8 +250,9 @@ const configurePrivateSocket = (io, prisma, sharedState) => {
         // Enviar confirmación al remitente con el mismo formato
         socket.emit('privateMessageConfirmation', formattedMessage);
         
-        // Si el receptor no está en el chat pero está online, enviar notificación
-        if (isReceiverOnline && !isReceiverInChat) {
+        // IMPORTANTE: Siempre enviar notificación al receptor si no está en el chat actual
+        // Esto asegura que el indicador de mensajes no leídos se actualice en tiempo real
+        if (!isReceiverInChat && isReceiverOnline) {
           const receiverSocketId = userSockets[receiverId];
           if (receiverSocketId) {
             io.to(receiverSocketId).emit('newMessageNotification', {
@@ -247,13 +261,19 @@ const configurePrivateSocket = (io, prisma, sharedState) => {
               preview: text.substring(0, 30) + (text.length > 30 ? '...' : ''),
               messageId: message.id
             });
+            
+            // También emitir explícitamente el evento privateMessage para asegurar la actualización
+            io.to(receiverSocketId).emit('privateMessage', formattedMessage);
           }
         }
         
-        console.log(`Mensaje enviado de ${senderId} a ${receiverId} con estado: ${initialStatus}`);
+        console.log(`Mensaje ${message.id} enviado de ${senderId} a ${receiverId} con estado: ${initialStatus}`);
       } catch (error) {
         console.error('Error al enviar mensaje privado:', error);
-        socket.emit('messageError', { error: 'No se pudo enviar el mensaje' });
+        socket.emit('messageError', { 
+          error: 'No se pudo enviar el mensaje',
+          tempId: data.tempId
+        });
       }
     });
 
@@ -389,55 +409,61 @@ socket.on('uploadFile', async (data, callback) => {
 });
     
     // Marcar mensajes como leídos
-    socket.on('markMessagesAsRead', async (data) => {
-      try {
-        const { userId, senderId, messageIds } = data;
+    // Mejora el manejo de marcado de mensajes como leídos
+socket.on('markMessagesAsRead', async (data) => {
+  try {
+    const { userId, senderId, messageIds } = data;
 
-        if (!messageIds || messageIds.length === 0) {
-          socket.emit('messageError', { error: 'No se especificaron mensajes para marcar' });
-          return;
-        }
+    if (!messageIds || messageIds.length === 0) {
+      console.error('No se especificaron mensajes para marcar como leídos');
+      socket.emit('messageError', { error: 'No se especificaron mensajes para marcar' });
+      return;
+    }
 
-        // Actualizar los mensajes a estado "leido"
-        await prisma.mensaje.updateMany({
-          where: { 
-            id: { in: messageIds.map(id => parseInt(id)) },
-            remitente_id: parseInt(senderId),
-            destinatario_id: parseInt(userId),
-            estado: { not: 'leido' } // Solo actualizar si no están ya leídos
-          },
-          data: { 
-            estado: 'leido' 
-          }
-        });
+    console.log(`Usuario ${userId} marcando como leídos ${messageIds.length} mensajes de ${senderId}`);
 
-        socket.emit('messagesReadConfirmation', { 
-          success: true, 
-          messageIds 
-        });
-        
-        // Notificar al remitente que sus mensajes han sido leídos
-        const senderSocketId = userSockets[senderId];
-        if (senderSocketId) {
-          io.to(senderSocketId).emit('messagesRead', {
-            readerId: userId,
-            messageIds
-          });
-        }
-        
-        // NUEVO: Emitir actualización a todos en la sala para que actualicen la UI
-        const roomId = [userId, senderId].sort().join('-');
-        io.to(roomId).emit('messagesStatusChanged', {
-          messageIds,
-          newStatus: 'leido'
-        });
-        
-        console.log(`Usuario ${userId} marcó como leídos ${messageIds.length} mensajes de ${senderId}`);
-      } catch (error) {
-        console.error('Error al marcar mensajes como leídos:', error);
-        socket.emit('messageError', { error: 'Error al marcar mensajes como leídos' });
+    // Actualizar los mensajes a estado "leido"
+    const updateResult = await prisma.mensaje.updateMany({
+      where: { 
+        id: { in: messageIds.map(id => parseInt(id)) },
+        remitente_id: parseInt(senderId),
+        destinatario_id: parseInt(userId),
+        estado: { not: 'leido' } // Solo actualizar si no están ya leídos
+      },
+      data: { 
+        estado: 'leido' 
       }
     });
+
+    console.log(`Mensajes actualizados: ${updateResult.count} de ${messageIds.length} solicitados`);
+
+    socket.emit('messagesReadConfirmation', { 
+      success: true, 
+      messageIds 
+    });
+    
+    // Notificar al remitente que sus mensajes han sido leídos
+    const senderSocketId = userSockets[senderId];
+    if (senderSocketId) {
+      io.to(senderSocketId).emit('messagesRead', {
+        readerId: userId,
+        messageIds
+      });
+    }
+    
+    // Emitir actualización a todos en la sala para que actualicen la UI
+    const roomId = [userId, senderId].sort().join('-');
+    io.to(roomId).emit('messagesStatusChanged', {
+      messageIds,
+      newStatus: 'leido'
+    });
+    
+    console.log(`Notificación de lectura enviada para ${messageIds.length} mensajes`);
+  } catch (error) {
+    console.error('Error al marcar mensajes como leídos:', error);
+    socket.emit('messageError', { error: 'Error al marcar mensajes como leídos' });
+  }
+});
     
     // Desconexión del usuario
     socket.on('disconnect', async () => {

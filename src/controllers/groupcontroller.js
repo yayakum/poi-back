@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { sharedState } from '../socket.js'; // Importar el estado compartido
 const prisma = new PrismaClient();
 
 /**
@@ -169,6 +170,22 @@ export const createGroup = async (req, res) => {
         }
       }
     });
+
+    // Notificar a todos los participantes sobre el nuevo grupo creado
+    if (sharedState.io) {
+      // Emitir evento a los clientes relevantes
+      todosLosParticipantes.forEach(participanteId => {
+        // Verificar si el participante tiene un socket activo
+        const socketId = sharedState.userSockets[participanteId];
+        if (socketId) {
+          // Emitir evento personalizado para este usuario
+          sharedState.io.of('/private').to(socketId).emit('groupCreated', {
+            groupId: nuevoGrupo.id,
+            group: grupoCompleto
+          });
+        }
+      });
+    }
 
     return res.status(201).json({
       ok: true,

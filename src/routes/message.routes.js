@@ -9,7 +9,7 @@ import {
     deleteMessage,
     markMessagesAsRead,
     markGroupMessagesAsRead,
-    getUnreadMessageCounts,
+    getUnreadMessagesStatus,
 } from '../controllers/messagecontroller.js';
 import { uploadFile, uploadGroupFile } from '../controllers/filecontroller.js';
 import upload from '../middlewares/upload.js';
@@ -33,8 +33,9 @@ router.get('/messages/grupo/:groupId', getGroupMessages);
 router.post('/messages/grupo', sendGroupMessage);
 router.post('/messages/grupo/read', markGroupMessagesAsRead);
 
-// Obtener la cantidad de mensajes no leídos para un usuario
-router.get('/mensajes/noleidos/:userId', getUnreadMessageCounts);
+// Agregar esta ruta a message.routes.js
+router.get('/unread/:userId', getUnreadMessagesStatus);
+
 
 // Rutas para subir archivos
 router.post('/mensajes/archivo', upload.single('file'), uploadFile);

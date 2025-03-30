@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { sharedState } from '../socket.js'; // Importar el estado compartido
 const prisma = new PrismaClient();
 
 /**
@@ -255,6 +256,20 @@ export const updateUser = async (req, res) => {
       }
     });
 
+    // Emitir evento de actualización de perfil a través del socket
+    if (sharedState.io) {
+      const userProfileUpdate = {
+        id: parseInt(id),
+        nombre: usuarioActualizado.nombre,
+        foto_perfil: usuarioActualizado.foto_perfil,
+        descripcion: usuarioActualizado.descripcion
+      };
+
+      // Emitir a todos los clientes conectados
+      sharedState.io.of('/private').emit('userProfileUpdated', userProfileUpdate);
+      sharedState.io.of('/group').emit('userProfileUpdated', userProfileUpdate);
+    }
+
     return res.status(200).json({
       ok: true,
       mensaje: 'Usuario actualizado correctamente',
@@ -397,6 +412,18 @@ export const login = async (req, res) => {
       }
     });
 
+    // Inicializar contador de conexiones en el estado compartido
+    sharedState.userConnections[usuario.id.toString()] = 1;
+
+    // Notificar a todos los clientes conectados sobre el cambio de estado
+    // Acceder al io global a través del sharedState
+    if (sharedState.io) {
+      sharedState.io.of('/private').emit('userStatusChanged', { 
+        userId: usuario.id.toString(), 
+        status: 'online' 
+      });
+    }
+
     return res.status(200).json({
       ok: true,
       usuario: usuarioActualizado,
@@ -448,6 +475,33 @@ export const logout = async (req, res) => {
         estado: 'offline'
       }
     });
+
+    // Limpiar las conexiones y sockets del usuario
+    const userId = id.toString();
+    
+    // Cerrar todas las conexiones socket del usuario
+    if (sharedState.userSockets[userId] && sharedState.io) {
+      const socketId = sharedState.userSockets[userId];
+      const socket = sharedState.io.of('/private').sockets.get(socketId);
+      if (socket) {
+        socket.disconnect(true);
+      }
+    }
+    
+    // Limpiar datos del usuario en el estado compartido
+    delete sharedState.userSockets[userId];
+    delete sharedState.userConnections[userId];
+    if (sharedState.userActiveChatRooms && sharedState.userActiveChatRooms[userId]) {
+      delete sharedState.userActiveChatRooms[userId];
+    }
+
+    // Notificar a todos los clientes conectados sobre el cambio de estado
+    if (sharedState.io) {
+      sharedState.io.of('/private').emit('userStatusChanged', { 
+        userId, 
+        status: 'offline' 
+      });
+    }
 
     return res.status(200).json({
       ok: true,

@@ -2,7 +2,7 @@ import { Server } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
 import configurePrivateSocket from './sockets/privatesocket.js';
 import configureGroupSocket from './sockets/groupsocket.js';
-import configureVideoSocket from './sockets/videosocket.js';  // Uncommented
+import configureVideoSocket from './sockets/videosocket.js';
 
 const prisma = new PrismaClient();
 
@@ -45,14 +45,20 @@ export const sharedState = {
   userConnections: {},
 
   // Seguimiento de usuarios por grupos
-  groupMembers: {}
+  groupMembers: {},
+  
+  // Seguimiento de qué usuarios están en qué chats
+  userActiveChatRooms: {},
+  
+  // Referencia a io principal (se asignará más abajo)
+  io: null
 };
 
 const configureSocket = (server) => {
   // Crear instancias separadas de Socket.IO usando namespaces
   const privateNamespace = '/private';
   const groupNamespace = '/group';
-  const videoNamespace = '/video';  // Uncommented
+  const videoNamespace = '/video';
 
   const io = new Server(server, {
     cors: {
@@ -61,22 +67,25 @@ const configureSocket = (server) => {
       credentials: true
     }
   });
+  
+  // Guardar referencia a io en el estado compartido
+  sharedState.io = io;
 
   // Configurar servidores separados usando namespaces
   const privateIo = io.of(privateNamespace);
   const groupIo = io.of(groupNamespace);
-  const videoIo = io.of(videoNamespace);  // Uncommented
+  const videoIo = io.of(videoNamespace);
 
   // Pasar las instancias a sus respectivos configuradores
   configurePrivateSocket(privateIo, prisma, sharedState);
   configureGroupSocket(groupIo, prisma, sharedState);
-  configureVideoSocket(videoIo, prisma, sharedState);  // Uncommented
+  configureVideoSocket(videoIo, prisma, sharedState);
 
   return {
     io,
     privateIo,
     groupIo,
-    videoIo  // Uncommented
+    videoIo
   };
 };
 

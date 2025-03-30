@@ -77,6 +77,55 @@ const configureGroupSocket = (io, prisma, sharedState) => {
         
         // Informar a los demás miembros del grupo
         socket.to(roomId).emit('userJoinedGroup', { userId, groupId });
+        
+        // Actualizar mensajes pendientes a entregados cuando un usuario se une
+        try {
+          // Buscar mensajes pendientes donde este usuario no es el remitente
+          const pendingMessages = await prisma.mensaje.findMany({
+            where: {
+              grupo_id: parseInt(groupId),
+              estado: 'pendiente',
+              remitente_id: { not: parseInt(userId) }
+            },
+            select: {
+              id: true,
+              remitente_id: true
+            }
+          });
+          
+          if (pendingMessages.length > 0) {
+            // Actualizar estos mensajes a "entregado"
+            await prisma.mensaje.updateMany({
+              where: {
+                id: { in: pendingMessages.map(msg => msg.id) }
+              },
+              data: { estado: 'entregado' }
+            });
+            
+            // Agrupar los mensajes por remitente para notificar
+            const messagesByRemitente = {};
+            pendingMessages.forEach(msg => {
+              if (!messagesByRemitente[msg.remitente_id]) {
+                messagesByRemitente[msg.remitente_id] = [];
+              }
+              messagesByRemitente[msg.remitente_id].push(msg.id);
+            });
+            
+            // Notificar a cada remitente que sus mensajes fueron entregados
+            for (const remitenteId in messagesByRemitente) {
+              const senderSocketId = userSockets[remitenteId];
+              if (senderSocketId) {
+                io.to(senderSocketId).emit('messagesStatusUpdate', {
+                  messageIds: messagesByRemitente[remitenteId],
+                  status: 'entregado',
+                  groupId: parseInt(groupId)
+                });
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error al actualizar mensajes pendientes:', error);
+        }
       } catch (error) {
         console.error(`Error al unirse al grupo ${groupId}:`, error);
         socket.emit('groupError', { 
@@ -158,180 +207,276 @@ const configureGroupSocket = (io, prisma, sharedState) => {
     });
     
     // Enviar mensaje a un grupo
-    socket.on('sendGroupMessage', async (data) => {
-      try {
-        const { senderId, groupId, text, senderName, senderImage } = data;
-        
-        // Verificar que el usuario sea miembro del grupo
-        const memberExists = await prisma.grupo_usuarios.findFirst({
-          where: {
-            grupo_id: parseInt(groupId),
-            usuario_id: parseInt(senderId)
-          }
-        });
+    // Enviar mensaje a un grupo (versión corregida)
+socket.on('sendGroupMessage', async (data) => {
+  try {
+    const { senderId, groupId, text, senderName, senderImage } = data;
+    
+    // Verificar que el usuario sea miembro del grupo
+    const memberExists = await prisma.grupo_usuarios.findFirst({
+      where: {
+        grupo_id: parseInt(groupId),
+        usuario_id: parseInt(senderId)
+      }
+    });
 
-        if (!memberExists) {
-          socket.emit('groupError', { 
-            error: 'No puedes enviar mensajes a este grupo', 
-            groupId 
-          });
+    if (!memberExists) {
+      socket.emit('groupError', { 
+        error: 'No puedes enviar mensajes a este grupo', 
+        groupId 
+      });
+      return;
+    }
+    
+    // CORRECCIÓN: Verificar directamente en la base de datos si hay miembros online
+    // que no sean el remitente
+    const membersOnline = await prisma.grupo_usuarios.count({
+      where: {
+        grupo_id: parseInt(groupId),
+        usuario_id: { not: parseInt(senderId) },
+        usuarios: {
+          estado: 'online'
+        }
+      }
+    });
+    
+    // Determinar estado inicial basado en miembros online
+    const estadoInicial = membersOnline > 0 ? 'entregado' : 'pendiente';
+    
+    // Crear mensaje en la base de datos con el estado inicial correcto
+    const message = await prisma.mensaje.create({
+      data: {
+        remitente_id: parseInt(senderId),
+        grupo_id: parseInt(groupId),
+        contenido: text,
+        tipo: 'texto',
+        estado: estadoInicial  // Estado correcto basado en miembros online
+      },
+      include: {
+        usuarios_mensajes_remitente_idTousuarios: {
+          select: {
+            id: true,
+            nombre: true,
+            foto_perfil: true
+          }
+        }
+      }
+    });
+    
+    // Otorgar puntos al usuario por enviar mensaje de texto
+    await awardPointsForMessage(senderId, 'texto');
+    
+    // Obtener la sala del grupo
+    const roomId = `group-${groupId}`;
+    
+    // Crear el objeto de mensaje formateado
+    const formattedMessage = {
+      id: message.id,
+      text: message.contenido,
+      timestamp: message.created_at,
+      time: message.created_at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      senderId: parseInt(senderId),
+      senderName: senderName || message.usuarios_mensajes_remitente_idTousuarios.nombre,
+      senderImage: senderImage || message.usuarios_mensajes_remitente_idTousuarios.foto_perfil,
+      groupId: parseInt(groupId),
+      status: estadoInicial,  // Usar el estado inicial correcto
+      type: 'texto'
+    };
+    
+    // Enviar mensaje a todos en la sala (excepto el remitente)
+    socket.to(roomId).emit('groupMessage', formattedMessage);
+    
+    // Enviar confirmación al remitente (con el estado correcto)
+    socket.emit('groupMessageConfirmation', formattedMessage);
+    
+    // Verificar miembros activos en la sala para debugging
+    const activeMembers = groupMembers[groupId] ? [...groupMembers[groupId]] : [];
+    console.log(`Miembros activos según groupMembers: ${activeMembers.length}`);
+    console.log(`Miembros online según BD: ${membersOnline}`);
+    
+    // Notificar a los miembros del grupo que no están en la sala de chat
+    try {
+      // Obtener todos los miembros del grupo
+      const groupUsers = await prisma.grupo_usuarios.findMany({
+        where: { grupo_id: parseInt(groupId) },
+        select: { usuario_id: true }
+      });
+      
+      // Obtener información del grupo
+      const group = await prisma.grupos.findUnique({
+        where: { id: parseInt(groupId) },
+        select: { nombre: true }
+      });
+      
+      // Notificar a cada miembro que no está actualmente en la sala
+      groupUsers.forEach(user => {
+        // No notificar al remitente
+        if (user.usuario_id === parseInt(senderId)) {
           return;
         }
         
-        // Crear mensaje en la base de datos
-        const message = await prisma.mensaje.create({
-          data: {
-            remitente_id: parseInt(senderId),
-            grupo_id: parseInt(groupId),
-            contenido: text,
-            tipo: 'texto',
-            estado: 'entregado'  // Marcar como entregado inmediatamente
-          },
-          include: {
-            usuarios_mensajes_remitente_idTousuarios: {
-              select: {
-                id: true,
-                nombre: true,
-                foto_perfil: true
-              }
-            }
+        const memberSocketId = userSockets[user.usuario_id];
+        
+        // Solo notificar si el miembro tiene un socket activo y no está en la sala
+        if (memberSocketId && (!groupMembers[groupId] || !groupMembers[groupId].has(user.usuario_id.toString()))) {
+          io.to(memberSocketId).emit('newGroupMessageNotification', {
+            senderId: parseInt(senderId),
+            senderName: senderName,
+            groupId: parseInt(groupId),
+            groupName: group ? group.nombre : `Grupo ${groupId}`,
+            preview: text.substring(0, 30) + (text.length > 30 ? '...' : '')
+          });
+        }
+      });
+    } catch (error) {
+      console.error('Error al enviar notificaciones de grupo:', error);
+    }
+    
+    console.log(`Mensaje de grupo enviado por ${senderId} al grupo ${groupId}, estado: ${estadoInicial}`);
+  } catch (error) {
+    console.error('Error al enviar mensaje de grupo:', error);
+    socket.emit('messageError', { 
+      error: 'No se pudo enviar el mensaje al grupo',
+      groupId: data.groupId 
+    });
+  }
+});
+    
+    // Marcar mensajes de grupo como leídos
+   // Marcar mensajes de grupo como leídos
+socket.on('markGroupMessagesAsRead', async (data) => {
+  try {
+    const { userId, groupId, messageIds } = data;
+    
+    // Verificar que el usuario sea miembro del grupo
+    const memberExists = await prisma.grupo_usuarios.findFirst({
+      where: {
+        grupo_id: parseInt(groupId),
+        usuario_id: parseInt(userId)
+      }
+    });
+
+    if (!memberExists) {
+      socket.emit('groupError', { 
+        error: 'No eres miembro de este grupo',
+        groupId 
+      });
+      return;
+    }
+    
+    // Para cada mensaje, registrar que el usuario lo ha leído
+    if (messageIds && messageIds.length > 0) {
+      const processedMessageIds = [];
+      
+      await Promise.all(messageIds.map(async (messageId) => {
+        const parsedMessageId = parseInt(messageId);
+        
+        // Verificar si ya existe un registro de lectura
+        const existingRead = await prisma.mensaje_leido_grupos.findFirst({
+          where: {
+            mensaje_id: parsedMessageId,
+            usuario_id: parseInt(userId)
           }
         });
         
-        // Otorgar puntos al usuario por enviar mensaje de texto
-        await awardPointsForMessage(senderId, 'texto');
-        
-        // Obtener la sala del grupo
-        const roomId = `group-${groupId}`;
-        
-        // Crear el objeto de mensaje formateado
-        const formattedMessage = {
-          id: message.id,
-          text: message.contenido,
-          timestamp: message.created_at,
-          time: message.created_at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          senderId: parseInt(senderId),
-          senderName: senderName || message.usuarios_mensajes_remitente_idTousuarios.nombre,
-          senderImage: senderImage || message.usuarios_mensajes_remitente_idTousuarios.foto_perfil,
-          groupId: parseInt(groupId),
-          status: 'entregado',
-          type: 'texto'
-        };
-        
-        // Enviar mensaje a todos en la sala (excepto el remitente)
-        socket.to(roomId).emit('groupMessage', formattedMessage);
-        
-        // Enviar confirmación al remitente
-        socket.emit('groupMessageConfirmation', formattedMessage);
-        
-        // Notificar a los miembros del grupo que no están en la sala de chat
-        try {
+        // Si no existe, crear el registro
+        if (!existingRead) {
+          await prisma.mensaje_leido_grupos.create({
+            data: {
+              mensaje_id: parsedMessageId,
+              usuario_id: parseInt(userId),
+              fecha_lectura: new Date()
+            }
+          });
+          
+          processedMessageIds.push(parsedMessageId);
+        }
+      }));
+      
+      // Si se marcaron nuevos mensajes como leídos, verificar si todos los miembros los han leído
+      if (processedMessageIds.length > 0) {
+        // Para cada mensaje procesado
+        for (const messageId of processedMessageIds) {
+          // Obtener el mensaje para saber quién es el remitente
+          const message = await prisma.mensaje.findUnique({
+            where: { id: messageId },
+            select: { remitente_id: true, estado: true }
+          });
+          
+          if (!message || message.estado === 'leido') continue;
+          
           // Obtener todos los miembros del grupo
-          const groupUsers = await prisma.grupo_usuarios.findMany({
+          const groupMembers = await prisma.grupo_usuarios.findMany({
             where: { grupo_id: parseInt(groupId) },
             select: { usuario_id: true }
           });
           
-          // Obtener información del grupo
-          const group = await prisma.grupos.findUnique({
-            where: { id: parseInt(groupId) },
-            select: { nombre: true }
+          // Obtener todos los registros de lectura para este mensaje
+          const readRecords = await prisma.mensaje_leido_grupos.findMany({
+            where: { mensaje_id: messageId },
+            select: { usuario_id: true }
           });
           
-          // Notificar a cada miembro que no está actualmente en la sala
-          groupUsers.forEach(user => {
-            // No notificar al remitente
-            if (user.usuario_id === parseInt(senderId)) {
-              return;
-            }
+          // Crear un conjunto de IDs de usuarios que han leído el mensaje
+          const readUserIds = new Set(readRecords.map(r => r.usuario_id));
+          
+          // Verificar si todos los miembros (excepto el remitente) han leído el mensaje
+          let allMembersRead = true;
+          for (const member of groupMembers) {
+            // No necesitamos verificar si el remitente leyó su propio mensaje
+            if (member.usuario_id === message.remitente_id) continue;
             
-            const memberSocketId = userSockets[user.usuario_id];
-            
-            // Solo notificar si el miembro tiene un socket activo y no está en la sala
-            if (memberSocketId && (!groupMembers[groupId] || !groupMembers[groupId].has(user.usuario_id.toString()))) {
-              io.to(memberSocketId).emit('newGroupMessageNotification', {
-                senderId: parseInt(senderId),
-                senderName: senderName,
-                groupId: parseInt(groupId),
-                groupName: group ? group.nombre : `Grupo ${groupId}`,
-                preview: text.substring(0, 30) + (text.length > 30 ? '...' : '')
-              });
+            if (!readUserIds.has(member.usuario_id)) {
+              allMembersRead = false;
+              break;
             }
-          });
-        } catch (error) {
-          console.error('Error al enviar notificaciones de grupo:', error);
-        }
-        
-        console.log(`Mensaje de grupo enviado por ${senderId} al grupo ${groupId}`);
-      } catch (error) {
-        console.error('Error al enviar mensaje de grupo:', error);
-        socket.emit('messageError', { 
-          error: 'No se pudo enviar el mensaje al grupo',
-          groupId: data.groupId 
-        });
-      }
-    });
-    
-    // Marcar mensajes de grupo como leídos
-    socket.on('markGroupMessagesAsRead', async (data) => {
-      try {
-        const { userId, groupId, messageIds } = data;
-        
-        // Verificar que el usuario sea miembro del grupo
-        const memberExists = await prisma.grupo_usuarios.findFirst({
-          where: {
-            grupo_id: parseInt(groupId),
-            usuario_id: parseInt(userId)
           }
-        });
-
-        if (!memberExists) {
-          socket.emit('groupError', { 
-            error: 'No eres miembro de este grupo',
-            groupId 
-          });
-          return;
-        }
-        
-        // Para cada mensaje, registrar que el usuario lo ha leído
-        if (messageIds && messageIds.length > 0) {
-          await Promise.all(messageIds.map(async (messageId) => {
-            // Verificar si ya existe un registro de lectura
-            const existingRead = await prisma.mensaje_leido_grupos.findFirst({
-              where: {
-                mensaje_id: parseInt(messageId),
-                usuario_id: parseInt(userId)
-              }
+          
+          // Si todos han leído el mensaje, actualizarlo a 'leido'
+          if (allMembersRead && message.estado !== 'leido') {
+            await prisma.mensaje.update({
+              where: { id: messageId },
+              data: { estado: 'leido' }
             });
             
-            // Si no existe, crear el registro
-            if (!existingRead) {
-              await prisma.mensaje_leido_grupos.create({
-                data: {
-                  mensaje_id: parseInt(messageId),
-                  usuario_id: parseInt(userId),
-                  fecha_lectura: new Date()
-                }
+            // Notificar al remitente que su mensaje ha sido leído por todos
+            const senderSocketId = userSockets[message.remitente_id];
+            if (senderSocketId) {
+              io.to(senderSocketId).emit('messageStatusUpdate', {
+                messageId,
+                status: 'leido',
+                groupId: parseInt(groupId)
               });
             }
-          }));
-          
-          console.log(`Usuario ${userId} marcó como leídos ${messageIds.length} mensajes en el grupo ${groupId}`);
-          
-          // Emitir confirmación
-          socket.emit('groupMessagesReadConfirmation', {
-            groupId,
-            messageIds
-          });
+            
+            // Notificar a todos los miembros del grupo sobre el cambio de estado
+            // CORRECCIÓN: Definir roomId correctamente
+            const roomId = `group-${groupId}`;
+            io.to(roomId).emit('messageStatusUpdate', {
+              messageId,
+              status: 'leido', 
+              groupId: parseInt(groupId)
+            });
+          }
         }
-      } catch (error) {
-        console.error('Error al marcar mensajes de grupo como leídos:', error);
-        socket.emit('groupError', { 
-          error: 'Error al marcar mensajes como leídos',
-          groupId: data.groupId 
-        });
       }
+      
+      console.log(`Usuario ${userId} marcó como leídos ${messageIds.length} mensajes en el grupo ${groupId}`);
+      
+      // Emitir confirmación
+      socket.emit('groupMessagesReadConfirmation', {
+        groupId,
+        messageIds
+      });
+    }
+  } catch (error) {
+    console.error('Error al marcar mensajes de grupo como leídos:', error);
+    socket.emit('groupError', { 
+      error: 'Error al marcar mensajes como leídos',
+      groupId: data.groupId 
     });
+  }
+});
     
     // Abandonar un chat de grupo
     socket.on('leaveGroupChat', ({ userId, groupId }) => {
