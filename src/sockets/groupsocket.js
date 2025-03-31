@@ -167,7 +167,7 @@ const configureGroupSocket = (io, prisma, sharedState) => {
         }
         
         // Crear URL completa para el archivo
-        const serverUrl = 'http://localhost:3000'; // Ajusta según tu configuración
+        const serverUrl = 'https://poi-back.vercel.app'; // Ajusta según tu configuración
         const fileUrl = `${serverUrl}${archivo.ruta}`;
         
         const sender = message.usuarios_mensajes_remitente_idTousuarios;
