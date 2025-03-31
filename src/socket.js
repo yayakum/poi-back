@@ -62,7 +62,7 @@ const configureSocket = (server) => {
 
   const io = new Server(server, {
     cors: {
-      origin: "https://poi-front.vercel.app",
+      origin: "http://localhost:3001",
       methods: ["GET", "POST"],
       credentials: true
     }

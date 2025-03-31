@@ -30,7 +30,7 @@ const __dirname = path.dirname(__filename);
 
 // Configuración de CORS
 const corsOptions = {
-  origin: 'https://poi-front.vercel.app', // Asegúrate de que este sea el puerto de tu frontend
+  origin: 'http://localhost:3001', // Asegúrate de que este sea el puerto de tu frontend
   credentials: true,
 };
 

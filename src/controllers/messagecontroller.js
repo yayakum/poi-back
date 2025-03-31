@@ -91,7 +91,7 @@ export const getUserMessages = async (req, res) => {
       attachments: message.archivos.map(file => ({
         id: file.id,
         name: file.nombre_original,
-        url: `https://poi-back.vercel.app${file.ruta}`, // URL completa
+        url: `http://localhost:3000${file.ruta}`, // URL completa
         type: file.tipo_mime,
         size: file.tama_o
       }))
@@ -159,7 +159,7 @@ export const getGroupMessages = async (req, res) => {
       const sender = message.usuarios_mensajes_remitente_idTousuarios;
       
       // Construir la URL base para archivos
-      const serverUrl = 'https://poi-back.vercel.app'; // En producción esto podría venir de configuración
+      const serverUrl = 'http://localhost:3000'; // En producción esto podría venir de configuración
       
       return {
         id: message.id,
