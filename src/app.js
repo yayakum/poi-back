@@ -33,7 +33,7 @@ const corsOptions = {
   origin: 'https://poi-front.vercel.app', // Asegúrate de que este sea el puerto de tu frontend
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+  
 };
 
 // Middleware
