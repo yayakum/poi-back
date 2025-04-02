@@ -1,5 +1,5 @@
 import { awardPointsForMessage } from '../socket.js';
-
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
 const configurePrivateSocket = (io, prisma, sharedState) => {
   const { userSockets, userConnections } = sharedState;
   
@@ -338,7 +338,7 @@ socket.on('fileMessageSent', async (data) => {
     }
     
     // Crear URL completa para el archivo
-    const serverUrl = 'http://localhost:3000'; // Ajusta según tu configuración
+    const serverUrl = `${SERVER_URL}`; // Ajusta según tu configuración
     const fileUrl = `${serverUrl}${archivo.ruta}`;
     
     const sender = message.usuarios_mensajes_remitente_idTousuarios;

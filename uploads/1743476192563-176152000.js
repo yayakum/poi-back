@@ -62,7 +62,7 @@ const configureSocket = (server) => {
 
   const io = new Server(server, {
     cors: {
-      origin: ['http://localhost:3001', 'http://192.168.50.145:3001'],
+      origin: "http://localhost:3001",
       methods: ["GET", "POST"],
       credentials: true
     }
