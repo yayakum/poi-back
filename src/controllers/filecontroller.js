@@ -1,9 +1,9 @@
 // filecontroller.js
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma.js';
 import path from 'path';
 import fs from 'fs';
 
-const prisma = new PrismaClient();
+
 
 // Función para determinar el tipo de mensaje basado en MIME type
 const getMessageTypeFromMime = (mimeType) => {

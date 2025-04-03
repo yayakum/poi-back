@@ -1,12 +1,12 @@
-// Modified app.js with HTTPS support
+// Modified app.js with HTTPS support and centralized Prisma client
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import http from 'http';
 import https from 'https'; // Import HTTPS module
 import fs from 'fs'; // Import FS to read certificate files
-import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
+import prisma from './lib/prisma.js'; // Import shared Prisma client
 import userRoutes from './routes/user.routes.js';
 import groupRoutes from './routes/group.routes.js';
 import messageRoutes from './routes/message.routes.js';
@@ -24,9 +24,6 @@ dotenv.config();
 const SERVER_URL = process.env.SERVER_URL;
 const USE_HTTPS = process.env.USE_HTTPS === 'true' || false;
 const PORT = process.env.PORT || 3000;
-
-// Initialize Prisma
-const prisma = new PrismaClient();
 
 // Initialize Express
 const app = express();
@@ -63,11 +60,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // CORS configuration
-// const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3001', 'http://192.168.50.145:3001', 'https://192.168.50.145:3001'];
 const allowedOrigins = process.env.ALLOWED_ORIGINS;
 const corsOptions = {
   origin: allowedOrigins,
-  // origin: '*', 
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true

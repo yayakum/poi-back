@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma.js';
 const SERVER_URL = process.env.SERVER_URL;
-const prisma = new PrismaClient();
+
 
 // Función auxiliar para asignar puntos por enviar mensajes
 const awardPointsForMessage = async (userId, messageType) => {

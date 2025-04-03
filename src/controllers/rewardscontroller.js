@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../lib/prisma.js';
 
 // Obtener todas las recompensas disponibles
 export const getAllRewards = async (req, res) => {

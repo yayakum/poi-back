@@ -1,10 +1,8 @@
 import { Server } from 'socket.io';
-import { PrismaClient } from '@prisma/client';
+import prisma from './lib/prisma.js';
 import configurePrivateSocket from './sockets/privatesocket.js';
 import configureGroupSocket from './sockets/groupsocket.js';
 import configureVideoSocket from './sockets/videosocket.js';
-
-const prisma = new PrismaClient();
 
 // Función auxiliar para asignar puntos por enviar mensajes (compartida)
 export const awardPointsForMessage = async (userId, messageType) => {

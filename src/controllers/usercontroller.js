@@ -1,6 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma.js';
 import { sharedState } from '../socket.js'; // Importar el estado compartido
-const prisma = new PrismaClient();
 
 /**
  * Obtiene todos los usuarios

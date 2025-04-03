@@ -1,8 +1,7 @@
 // controllers/task.controller.js
-import { PrismaClient } from '@prisma/client';
+import prisma from '../lib/prisma.js';
 import { sharedState } from '../socket.js';
 
-const prisma = new PrismaClient();
 
 // Crear una nueva tarea
 export const createTask = async (req, res) => {
