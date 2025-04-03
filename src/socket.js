@@ -1,4 +1,3 @@
-// Versión corregida en socket.js
 import { Server } from 'socket.io';
 import prisma from './lib/prisma.js';
 import configurePrivateSocket from './sockets/privatesocket.js';
@@ -59,7 +58,7 @@ const configureSocket = (server) => {
   const groupNamespace = '/group';
   const videoNamespace = '/video';
   
-  // IMPORTANTE: Parsear correctamente la variable de entorno para CORS
+  // Parsear correctamente la variable de entorno para CORS
   let allowedOrigins = process.env.ALLOWED_ORIGINS || "";
   
   // Convertir string a array si contiene comas

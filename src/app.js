@@ -28,6 +28,18 @@ const PORT = process.env.PORT || 3000;
 // Initialize Express
 const app = express();
 
+// Middleware para configurar manualmente los encabezados CORS (agregar antes de otros middlewares)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://poi-front.vercel.app');
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send();
+  }
+  next();
+});
+
 // Set up HTTP or HTTPS server based on configuration
 let server;
 
@@ -60,12 +72,29 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // CORS configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS;
+const allowedOriginsString = process.env.ALLOWED_ORIGINS || '';
+const allowedOrigins = allowedOriginsString.split(',').map(origin => origin.trim());
+
+console.log('Configurando CORS con orígenes permitidos:', allowedOrigins);
+
 const corsOptions = {
-  origin: allowedOrigins,
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  origin: function (origin, callback) {
+    // Permitir solicitudes sin origen (como aplicaciones móviles o curl)
+    if (!origin) return callback(null, true);
+    
+    // Verificar si el origen está en la lista de permitidos
+    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      console.warn(`Origen bloqueado por CORS: ${origin}`);
+      callback(new Error('No permitido por CORS'));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 
 // Middleware
