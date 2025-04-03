@@ -1,5 +1,5 @@
 import { awardPointsForMessage } from '../socket.js';
-const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
+const SERVER_URL = process.env.SERVER_URL;
 const configureGroupSocket = (io, prisma, sharedState) => {
   const { userSockets, userConnections, groupMembers } = sharedState;
 

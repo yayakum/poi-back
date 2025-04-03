@@ -21,7 +21,7 @@ import { fileURLToPath } from 'url';
 dotenv.config();
 
 // Get server URL from environment or use default
-const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
+const SERVER_URL = process.env.SERVER_URL;
 const USE_HTTPS = process.env.USE_HTTPS === 'true' || false;
 const PORT = process.env.PORT || 3000;
 
@@ -63,11 +63,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // CORS configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3001', 'http://192.168.50.145:3001', 'https://192.168.50.145:3001'];
-
+// const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3001', 'http://192.168.50.145:3001', 'https://192.168.50.145:3001'];
+const allowedOrigins = process.env.ALLOWED_ORIGINS;
 const corsOptions = {
   origin: allowedOrigins,
-  credentials: true,
+  // origin: '*', 
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
 };
 
 // Middleware

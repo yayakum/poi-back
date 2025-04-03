@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
+const SERVER_URL = process.env.SERVER_URL;
 const prisma = new PrismaClient();
 
 // Función auxiliar para asignar puntos por enviar mensajes
