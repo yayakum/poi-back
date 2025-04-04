@@ -1,5 +1,5 @@
 import prisma from '../lib/prisma.js';
-const SERVER_URL = process.env.SERVER_URL;
+// const SERVER_URL = process.env.SERVER_URL;
 
 
 // Función auxiliar para asignar puntos por enviar mensajes
@@ -91,7 +91,8 @@ export const getUserMessages = async (req, res) => {
       attachments: message.archivos.map(file => ({
         id: file.id,
         name: file.nombre_original,
-        url: `${SERVER_URL}${file.ruta}`, // URL completa
+        // url: `${SERVER_URL}${file.ruta}`, // URL completa
+        url: `https://poi-back-xi.vercel.app${file.ruta}`, // URL completa
         type: file.tipo_mime,
         size: file.tama_o
       }))
@@ -159,7 +160,8 @@ export const getGroupMessages = async (req, res) => {
       const sender = message.usuarios_mensajes_remitente_idTousuarios;
       
       // Construir la URL base para archivos
-      const serverUrl = `${SERVER_URL}`; // En producción esto podría venir de configuración
+      // const serverUrl = `${SERVER_URL}`; // En producción esto podría venir de configuración
+      const serverUrl = 'https://poi-back-xi.vercel.app';
       
       return {
         id: message.id,

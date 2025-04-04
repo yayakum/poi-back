@@ -1,8 +1,10 @@
-// Modified app.js without HTTPS support
+// Modified app.js with HTTPS support
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import http from 'http';
+import https from 'https'; // Import HTTPS module
+import fs from 'fs'; // Import FS to read certificate files
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import userRoutes from './routes/user.routes.js';
@@ -20,6 +22,7 @@ dotenv.config();
 
 // Get server URL from environment or use default
 const SERVER_URL = process.env.SERVER_URL;
+const USE_HTTPS = process.env.USE_HTTPS === 'true' || false;
 const PORT = process.env.PORT || 3000;
 
 // Initialize Prisma
@@ -28,9 +31,29 @@ const prisma = new PrismaClient();
 // Initialize Express
 const app = express();
 
-// Set up HTTP server
-const server = http.createServer(app);
-console.log('Starting server with HTTP');
+// Set up HTTP or HTTPS server based on configuration
+let server;
+
+if (USE_HTTPS) {
+  try {
+    // Read SSL certificate and key files
+    // For development, you can generate self-signed certificates
+    const privateKey = fs.readFileSync('server.key', 'utf8');
+    const certificate = fs.readFileSync('server.cert', 'utf8');
+    const credentials = { key: privateKey, cert: certificate };
+    
+    // Create HTTPS server
+    server = https.createServer(credentials, app);
+    console.log('Starting server with HTTPS enabled');
+  } catch (error) {
+    console.error('Error setting up HTTPS server:', error);
+    console.log('Falling back to HTTP server');
+    server = http.createServer(app);
+  }
+} else {
+  server = http.createServer(app);
+  console.log('Starting server with HTTP (no HTTPS)');
+}
 
 // Configure Socket.IO with namespaces
 const socketInstances = configureSocket(server);
@@ -40,8 +63,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // CORS configuration
+// const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3001', 'http://192.168.50.145:3001', 'https://192.168.50.145:3001'];
+const allowedOrigins = process.env.ALLOWED_ORIGINS;
 const corsOptions = {
-  origin: 'https://poi-back-xi.vercel.app',
+  origin: allowedOrigins,
+  // origin: '*', 
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 };
 
@@ -80,8 +108,9 @@ app.use('*', (req, res) => {
 
 // Start server
 server.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
-  console.log(`También accesible en http://192.168.50.145:${PORT}`);
+  const protocol = USE_HTTPS ? 'https' : 'http';
+  console.log(`Servidor corriendo en ${protocol}://localhost:${PORT}`);
+  console.log(`También accesible en ${protocol}://192.168.50.145:${PORT}`);
   console.log(`Socket.IO privado en namespace: /private`);
   console.log(`Socket.IO grupal en namespace: /group`);
   console.log(`Socket.IO video en namespace: /video`);
