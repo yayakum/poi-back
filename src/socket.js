@@ -1,8 +1,10 @@
 import { Server } from 'socket.io';
-import prisma from './lib/prisma.js';
+import { PrismaClient } from '@prisma/client';
 import configurePrivateSocket from './sockets/privatesocket.js';
 import configureGroupSocket from './sockets/groupsocket.js';
 import configureVideoSocket from './sockets/videosocket.js';
+
+const prisma = new PrismaClient();
 
 // Función auxiliar para asignar puntos por enviar mensajes (compartida)
 export const awardPointsForMessage = async (userId, messageType) => {
@@ -57,29 +59,16 @@ const configureSocket = (server) => {
   const privateNamespace = '/private';
   const groupNamespace = '/group';
   const videoNamespace = '/video';
-  
-  // Parsear correctamente la variable de entorno para CORS
-  let allowedOrigins = process.env.ALLOWED_ORIGINS || "";
-  
-  // Convertir string a array si contiene comas
-  if (typeof allowedOrigins === 'string') {
-    allowedOrigins = allowedOrigins.split(',').map(origin => origin.trim());
-  }
-  
-  console.log('Orígenes permitidos para CORS:', allowedOrigins);
-  
+  const allowedOrigins = process.env.ALLOWED_ORIGINS;
   const io = new Server(server, {
     cors: {
-      origin: allowedOrigins,
+      // origin: ['http://localhost:3001', 'http://192.168.50.145:3001', 'https://192.168.50.145:3001'],
+      origin: '*', 
+      // origin: allowedOrigins,
       methods: ["GET", "POST", "PUT", "DELETE"],
-      allowedHeaders: ["Content-Type", "Authorization"],
-      credentials: true
-    },
-    // Añadir configuración adicional para Socket.IO en Vercel
-    transports: ['websocket', 'polling'],
-    allowEIO3: true,
-    pingTimeout: 60000,
-    pingInterval: 25000
+      // allowedHeaders: ["Content-Type", "Authorization"],
+      // credentials: true
+    }
   });
   
   // Guardar referencia a io en el estado compartido

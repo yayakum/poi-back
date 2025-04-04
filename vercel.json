@@ -8,46 +8,6 @@
   ],
   "routes": [
     {
-      "src": "/socket.io/(.*)",
-      "dest": "src/app.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "https://poi-front.vercel.app",
-        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type,Authorization",
-        "Access-Control-Allow-Credentials": "true"
-      }
-    },
-    {
-      "src": "/private/(.*)",
-      "dest": "src/app.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "https://poi-front.vercel.app",
-        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type,Authorization",
-        "Access-Control-Allow-Credentials": "true"
-      }
-    },
-    {
-      "src": "/group/(.*)",
-      "dest": "src/app.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "https://poi-front.vercel.app",
-        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type,Authorization",
-        "Access-Control-Allow-Credentials": "true"
-      }
-    },
-    {
-      "src": "/video/(.*)",
-      "dest": "src/app.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "https://poi-front.vercel.app",
-        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type,Authorization",
-        "Access-Control-Allow-Credentials": "true"
-      }
-    },
-    {
       "src": "/(.*)",
       "dest": "src/app.js"
     }
