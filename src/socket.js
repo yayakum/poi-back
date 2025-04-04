@@ -61,7 +61,7 @@ const configureSocket = (server) => {
   const io = new Server(server, {
     cors: {
       // origin: allowedOrigins,
-      origin: 'https://poi-back-xi.vercel.app',
+      origin: 'https://poi-front.vercel.app',
       // methods: ["GET", "POST", "PUT", "DELETE"],
       // allowedHeaders: ["Content-Type", "Authorization"],
       credentials: true
