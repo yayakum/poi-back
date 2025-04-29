@@ -60,17 +60,11 @@ const configureSocket = (server) => {
   // const allowedOrigins = process.env.ALLOWED_ORIGINS;
   const io = new Server(server, {
     cors: {
-      // origin: allowedOrigins,
-      origin: 'https://poi-front.vercel.app',
-      // methods: ["GET", "POST", "PUT", "DELETE"],
-      // allowedHeaders: ["Content-Type", "Authorization"],
+
+      origin: 'https://poi-front.onrender.com',
+
       credentials: true
     },
-    // Añadir configuración adicional para Socket.IO en Vercel
-    transports: ['websocket', 'polling'],
-    allowEIO3: true,
-    pingTimeout: 60000,
-    pingInterval: 25000
   });
   
   // Guardar referencia a io en el estado compartido

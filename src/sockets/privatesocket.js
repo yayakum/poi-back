@@ -339,7 +339,7 @@ socket.on('fileMessageSent', async (data) => {
     
     // Crear URL completa para el archivo
     // const serverUrl = `${SERVER_URL}`; // Ajusta según tu configuración
-    const serverUrl = 'https://poi-back-xi.vercel.app'; // Ajusta según tu configuración
+    const serverUrl = 'https://poi-front.onrender.com'; // Ajusta según tu configuración
     const fileUrl = `${serverUrl}${archivo.ruta}`;
     
     const sender = message.usuarios_mensajes_remitente_idTousuarios;

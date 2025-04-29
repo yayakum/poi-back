@@ -92,7 +92,7 @@ export const getUserMessages = async (req, res) => {
         id: file.id,
         name: file.nombre_original,
         // url: `${SERVER_URL}${file.ruta}`, // URL completa
-        url: `https://poi-back-xi.vercel.app${file.ruta}`, // URL completa
+        url: `https://poi-front.onrender.com${file.ruta}`, // URL completa
         type: file.tipo_mime,
         size: file.tama_o
       }))
@@ -161,7 +161,7 @@ export const getGroupMessages = async (req, res) => {
       
       // Construir la URL base para archivos
       // const serverUrl = `${SERVER_URL}`; // En producción esto podría venir de configuración
-      const serverUrl = 'https://poi-back-xi.vercel.app';
+      const serverUrl = 'https://poi-front.onrender.com';
       
       return {
         id: message.id,

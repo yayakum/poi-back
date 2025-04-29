@@ -41,7 +41,7 @@ const __dirname = path.dirname(__filename);
 
 // CORS configuration
 const corsOptions = {
-  origin: 'https://poi-front.vercel.app',
+  origin: 'https://poi-front.onrender.com',
   credentials: true
 };
 
